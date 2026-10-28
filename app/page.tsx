@@ -7,7 +7,7 @@ export default function Page() {
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#070708] text-white/70">
       <Backdrop />
 
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-12 px-6 py-10">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-10 px-5 py-10 sm:gap-12 sm:px-6">
         <MasterTitle />
 
         <div className="flex items-center gap-10 md:gap-24">
@@ -30,7 +30,7 @@ export default function Page() {
           <span className="text-[10px] font-light uppercase tracking-[0.4em] text-[rgba(226,170,120,0.55)]">Coffee</span>
         </div>
 
-        <p className="font-[family-name:var(--font-display)] text-lg font-light tracking-[0.08em] text-[rgba(232,207,143,0.6)] text-balance">
+        <p className="font-[family-name:var(--font-display)] text-center text-base font-light tracking-[0.06em] text-[rgba(232,207,143,0.6)] text-balance sm:text-lg sm:tracking-[0.08em]">
           {'...find the one whose love you drink...'}
         </p>
       </main>

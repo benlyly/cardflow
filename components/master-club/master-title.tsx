@@ -5,7 +5,7 @@ function Ornament({ flip = false }: { flip?: boolean }) {
   return (
     <span className={`flex items-center gap-2 ${flip ? 'flex-row-reverse' : ''}`} aria-hidden="true">
       <span
-        className="h-px w-10 md:w-24"
+        className="h-px w-5 sm:w-10 md:w-24"
         style={{
           background: `linear-gradient(${flip ? '270deg' : '90deg'}, transparent, rgba(217,179,106,0.7))`,
         }}
@@ -18,10 +18,10 @@ function Ornament({ flip = false }: { flip?: boolean }) {
 export function MasterTitle() {
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="flex items-center gap-4 md:gap-7">
+      <div className="flex items-center gap-2.5 sm:gap-4 md:gap-7">
         <Ornament />
         <h1
-          className="bg-clip-text pl-[0.32em] font-[family-name:var(--font-display)] text-[2.75rem] font-light uppercase leading-none tracking-[0.32em] text-transparent md:text-[4rem]"
+          className="bg-clip-text pl-[0.32em] font-[family-name:var(--font-display)] text-[2.1rem] font-light uppercase leading-none tracking-[0.24em] text-transparent sm:text-[2.75rem] sm:tracking-[0.32em] md:text-[4rem]"
           style={{
             backgroundImage: GOLD_GRADIENT,
             WebkitTextStroke: '0.6px rgba(247,231,180,0.35)',
