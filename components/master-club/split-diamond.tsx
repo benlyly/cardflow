@@ -22,32 +22,43 @@ interface LiquidPalette {
   stops: ReadonlyArray<readonly [number, string]>
   meniscus: string
   meniscusGlow: string
+  /** rgba prefixes, completed with an alpha and `)` at draw time. */
   light: string
+  hot: string
+  crema?: string
+  bubbles: number
 }
 
 const TEA: LiquidPalette = {
   stops: [
-    [0, 'rgba(222,232,150,0.16)'],
-    [0.35, 'rgba(182,206,96,0.26)'],
-    [0.75, 'rgba(128,160,52,0.4)'],
-    [1, 'rgba(82,112,30,0.55)'],
+    [0, 'rgba(238,242,170,0.18)'],
+    [0.3, 'rgba(210,218,96,0.3)'],
+    [0.7, 'rgba(166,182,48,0.42)'],
+    [1, 'rgba(116,136,26,0.55)'],
   ],
-  meniscus: 'rgba(244,250,206,0.85)',
-  meniscusGlow: 'rgba(196,230,120,0.7)',
-  light: 'rgba(214,240,150,',
+  meniscus: 'rgba(250,252,214,0.9)',
+  meniscusGlow: 'rgba(214,236,120,0.8)',
+  light: 'rgba(242,248,172,',
+  hot: 'rgba(255,236,140,',
+  bubbles: 5,
 }
 
 const COFFEE: LiquidPalette = {
   stops: [
-    [0, 'rgba(244,196,136,0.16)'],
-    [0.35, 'rgba(206,130,62,0.28)'],
-    [0.75, 'rgba(150,78,28,0.44)'],
-    [1, 'rgba(98,44,14,0.6)'],
+    [0, 'rgba(242,170,96,0.22)'],
+    [0.3, 'rgba(206,114,46,0.36)'],
+    [0.7, 'rgba(152,68,22,0.5)'],
+    [1, 'rgba(96,36,12,0.62)'],
   ],
-  meniscus: 'rgba(255,228,196,0.85)',
-  meniscusGlow: 'rgba(244,170,100,0.7)',
-  light: 'rgba(255,196,130,',
+  meniscus: 'rgba(255,226,190,0.9)',
+  meniscusGlow: 'rgba(255,168,90,0.8)',
+  light: 'rgba(255,204,136,',
+  hot: 'rgba(255,170,78,',
+  crema: 'rgba(62,26,8,',
+  bubbles: 11,
 }
+
+const GLINTS = 7
 
 interface HalfRuntime {
   canvas: HTMLCanvasElement | null
