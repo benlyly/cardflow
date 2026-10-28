@@ -1,9 +1,14 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Geist } from 'next/font/google'
+import { Cormorant_Garamond, Geist } from 'next/font/google'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'], weight: ['200', '300', '400'] })
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '500'],
+  variable: '--font-display',
+})
 
 export const metadata: Metadata = {
   title: 'master.club — Tea or Coffee',
@@ -39,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-[#070708]">
+    <html lang="en" className={`${cormorant.variable} bg-[#070708]`}>
       <body className={`${geist.className} bg-[#070708] antialiased`}>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

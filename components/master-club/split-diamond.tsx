@@ -165,7 +165,7 @@ function drawHalf(half: HalfRuntime, dpr: number, time: number) {
 export function SplitDiamond() {
   const stageRef = useRef<HTMLDivElement>(null)
   const seamRef = useRef<HTMLDivElement>(null)
-  const shockRef = useRef<HTMLDivElement>(null)
+  const shockRef = useRef<SVGSVGElement>(null)
   const teaCanvasRef = useRef<HTMLCanvasElement>(null)
   const coffeeCanvasRef = useRef<HTMLCanvasElement>(null)
   const teaRef = useRef<HTMLDivElement>(null)
@@ -214,7 +214,7 @@ export function SplitDiamond() {
       for (const half of [runtime.tea, runtime.coffee]) {
         if (!half.canvas) continue
         half.width = size / 2
-        half.height = size
+        half.height = stage.clientHeight
         half.canvas.width = Math.round(half.width * dpr)
         half.canvas.height = Math.round(half.height * dpr)
       }
@@ -300,11 +300,11 @@ export function SplitDiamond() {
       }
       if (shockRef.current) {
         const eased = 1 - (1 - shockProgress) ** 3
-        shockRef.current.style.transform = `translate(-50%, -50%) scale(${(0.2 + eased * (1.4 + s.shockStrength)).toFixed(3)}) rotate(45deg)`
+        shockRef.current.style.transform = `scale(${(0.2 + eased * (1.4 + s.shockStrength)).toFixed(3)})`
         shockRef.current.style.opacity = ((1 - shockProgress) ** 2 * Math.min(s.shockStrength, 1) * 0.7).toFixed(3)
       }
 
-      const maxAmplitude = s.size * 0.22
+      const maxAmplitude = (stageRef.current?.clientHeight ?? s.size) * 0.22
       for (const [half, factor] of [
         [runtime.tea, teaFactor],
         [runtime.coffee, coffeeFactor],
@@ -393,19 +393,29 @@ export function SplitDiamond() {
         role="img"
         tabIndex={0}
         aria-label="Split diamond: tea on the left, coffee on the right. Drag sideways or press the arrow keys to part the halves and release to make them clash."
-        className="relative aspect-square w-[clamp(160px,22vw,240px)] cursor-grab touch-none select-none outline-none will-change-transform active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:ring-offset-8 focus-visible:ring-offset-[#070708]"
+        className="relative aspect-[1.7/1] w-[clamp(240px,34vw,400px)] cursor-grab touch-none select-none outline-none will-change-transform active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:ring-offset-8 focus-visible:ring-offset-[#070708]"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={release}
         onPointerCancel={release}
         onKeyDown={handleKeyDown}
       >
-        <div
+        <svg
           ref={shockRef}
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 size-[71%] border border-white/40 opacity-0"
-          style={{ transform: 'translate(-50%, -50%) scale(0.2) rotate(45deg)', filter: 'blur(0.5px)' }}
-        />
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 size-full overflow-visible opacity-0"
+          style={{ transform: 'scale(0.2)', filter: 'blur(0.5px)' }}
+        >
+          <polygon
+            points="50,0 100,50 50,100 0,50"
+            fill="none"
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
 
         <div
           ref={teaRef}
