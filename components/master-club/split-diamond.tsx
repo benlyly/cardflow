@@ -11,37 +11,54 @@ const SPRING_STEP = 1 / 240
 const LEAD_FACTOR = 1.34
 const TRAIL_FACTOR = 0.48
 const SURFACE_LEVEL = 0.42
+const BUBBLES = 6
+
+const FRAME_STROKE = 'rgba(86,132,230,0.6)'
+const FRAME_GLOW = 'rgba(120,170,255,0.9)'
+const FRAME_CORE = 'rgba(214,230,255,0.95)'
+const FRAME_DURATION = '7s'
 
 interface LiquidPalette {
   stops: ReadonlyArray<readonly [number, string]>
   meniscus: string
   meniscusGlow: string
-  caustic: string
+  /** rgba prefixes, completed with an alpha and `)` at draw time. */
+  light: string
+  hot: string
+  crema?: string
+  bubbles: number
 }
 
 const TEA: LiquidPalette = {
   stops: [
-    [0, 'rgba(206,196,112,0.35)'],
-    [0.32, 'rgba(156,156,64,0.6)'],
-    [0.68, 'rgba(92,106,32,0.84)'],
-    [1, 'rgba(36,46,14,0.96)'],
+    [0, 'rgba(238,242,170,0.18)'],
+    [0.3, 'rgba(210,218,96,0.3)'],
+    [0.7, 'rgba(166,182,48,0.42)'],
+    [1, 'rgba(116,136,26,0.55)'],
   ],
-  meniscus: 'rgba(236,232,170,0.9)',
-  meniscusGlow: 'rgba(180,214,110,0.85)',
-  caustic: 'rgba(176,210,96,',
+  meniscus: 'rgba(250,252,214,0.9)',
+  meniscusGlow: 'rgba(214,236,120,0.8)',
+  light: 'rgba(242,248,172,',
+  hot: 'rgba(255,236,140,',
+  bubbles: 5,
 }
 
 const COFFEE: LiquidPalette = {
   stops: [
-    [0, 'rgba(220,160,96,0.35)'],
-    [0.32, 'rgba(166,98,46,0.62)'],
-    [0.68, 'rgba(96,48,20,0.86)'],
-    [1, 'rgba(32,14,6,0.96)'],
+    [0, 'rgba(242,170,96,0.22)'],
+    [0.3, 'rgba(206,114,46,0.36)'],
+    [0.7, 'rgba(152,68,22,0.5)'],
+    [1, 'rgba(96,36,12,0.62)'],
   ],
-  meniscus: 'rgba(248,212,170,0.9)',
-  meniscusGlow: 'rgba(236,152,80,0.85)',
-  caustic: 'rgba(236,148,64,',
+  meniscus: 'rgba(255,226,190,0.9)',
+  meniscusGlow: 'rgba(255,168,90,0.8)',
+  light: 'rgba(255,204,136,',
+  hot: 'rgba(255,170,78,',
+  crema: 'rgba(62,26,8,',
+  bubbles: 11,
 }
+
+const GLINTS = 7
 
 interface HalfRuntime {
   canvas: HTMLCanvasElement | null
@@ -50,6 +67,9 @@ interface HalfRuntime {
   palette: LiquidPalette
   /** Which canvas edge sits on the centre seam (where the halves collide). */
   seam: Edge
+  phase: number
+  pull: Float32Array
+  pullVelocity: Float32Array
   width: number
   height: number
 }
@@ -63,7 +83,7 @@ interface PhysicsState {
   armed: boolean
   pointerId: number | null
   dragOriginX: number
-  pointer: { x: number; y: number; vx: number; lastX: number; lastT: number }
+  pointer: { x: number; y: number; vx: number; lastX: number; lastT: number; active: boolean }
   recoil: number
   shockAge: number
   shockStrength: number
@@ -74,8 +94,55 @@ interface PhysicsState {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
+function createHalf(palette: LiquidPalette, seam: Edge, phase: number): HalfRuntime {
+  return {
+    canvas: null,
+    el: null,
+    surface: new FluidSurface(FLUID_POINTS),
+    palette,
+    seam,
+    phase,
+    pull: new Float32Array(FLUID_POINTS),
+    pullVelocity: new Float32Array(FLUID_POINTS),
+    width: 0,
+    height: 0,
+  }
+}
+
+/** Surface bulges toward the pointer like liquid drawn by a magnet, with a springy overshoot. */
+function updateMagnet(half: HalfRuntime, pointer: PhysicsState['pointer'], dt: number) {
+  const { canvas, pull, pullVelocity, width: w, height: h } = half
+  const n = pull.length
+  const rect = canvas?.getBoundingClientRect()
+  let localX = 0
+  let reach = 0
+  let proximity = 0
+
+  if (rect && rect.width > 0 && pointer.active) {
+    localX = ((pointer.x - rect.left) / rect.width) * w
+    const localY = ((pointer.y - rect.top) / rect.height) * h
+    const outsideX = Math.max(0, rect.left - pointer.x, pointer.x - rect.right)
+    const outsideY = Math.max(0, rect.top - pointer.y, pointer.y - rect.bottom)
+    const distance = Math.hypot(outsideX, outsideY)
+    const range = Math.max(w, 60) * 0.9
+    proximity = Math.exp(-(distance * distance) / (2 * range * range))
+    reach = clamp(localY - h * SURFACE_LEVEL, -h * 0.4, h * 0.3) * 0.6
+  }
+
+  const sigma = w * 0.24
+  const twoSigmaSq = 2 * sigma * sigma
+  for (let i = 0; i < n; i++) {
+    const xi = (i / (n - 1)) * w
+    const dx = xi - localX
+    const target = reach * proximity * Math.exp(-(dx * dx) / twoSigmaSq)
+    const accel = (target - pull[i]) * 70 - pullVelocity[i] * 9
+    pullVelocity[i] += accel * dt
+    pull[i] += pullVelocity[i] * dt
+  }
+}
+
 function drawHalf(half: HalfRuntime, dpr: number, time: number) {
-  const { canvas, surface, palette, seam, width: w, height: h } = half
+  const { canvas, surface, palette, seam, phase, pull, width: w, height: h } = half
   const ctx = canvas?.getContext('2d')
   if (!ctx || w === 0) return
 
@@ -83,8 +150,8 @@ function drawHalf(half: HalfRuntime, dpr: number, time: number) {
   ctx.clearRect(0, 0, w, h)
 
   const glass = ctx.createLinearGradient(0, 0, 0, h)
-  glass.addColorStop(0, 'rgba(255,255,255,0.028)')
-  glass.addColorStop(1, 'rgba(255,255,255,0.006)')
+  glass.addColorStop(0, 'rgba(255,255,255,0.035)')
+  glass.addColorStop(1, 'rgba(255,255,255,0.01)')
   ctx.fillStyle = glass
   ctx.fillRect(0, 0, w, h)
 
@@ -92,68 +159,102 @@ function drawHalf(half: HalfRuntime, dpr: number, time: number) {
   const n = surface.n
   const xs = new Float32Array(n)
   const ys = new Float32Array(n)
+  const tilt = Math.sin(time * 0.85 + phase) * h * 0.04 + Math.sin(time * 1.55 + phase * 2.3) * h * 0.014
+  const swell = Math.sin(time * 1.2 + phase) * h * 0.012
   for (let i = 0; i < n; i++) {
-    const ambient = Math.sin(i * 0.19 + time * 1.25) * 0.55 + Math.sin(i * 0.071 - time * 0.7) * 0.9
-    xs[i] = (i / (n - 1)) * w
-    ys[i] = baseY + surface.height[i] + ambient
+    const u = i / (n - 1)
+    const ambient = Math.sin(i * 0.21 + time * 1.4 + phase) * 0.6 + Math.sin(i * 0.08 - time * 0.8) * 0.9
+    const slosh = (u - 0.5) * 2 * tilt + Math.sin(u * Math.PI) * swell
+    xs[i] = u * w
+    ys[i] = baseY + surface.height[i] + slosh + ambient + pull[i]
   }
 
-  const traceSurface = (offsetY: number) => {
-    ctx.moveTo(xs[0], ys[0] + offsetY)
+  const traceSurface = (target: CanvasRenderingContext2D | Path2D, offsetY: number) => {
+    target.moveTo(xs[0], ys[0] + offsetY)
     for (let i = 1; i < n - 1; i++) {
-      const mx = (xs[i] + xs[i + 1]) / 2
-      const my = (ys[i] + ys[i + 1]) / 2 + offsetY
-      ctx.quadraticCurveTo(xs[i], ys[i] + offsetY, mx, my)
+      target.quadraticCurveTo(xs[i], ys[i] + offsetY, (xs[i] + xs[i + 1]) / 2, (ys[i] + ys[i + 1]) / 2 + offsetY)
     }
-    ctx.lineTo(xs[n - 1], ys[n - 1] + offsetY)
+    target.lineTo(xs[n - 1], ys[n - 1] + offsetY)
   }
 
   const liquid = new Path2D()
-  liquid.moveTo(xs[0], ys[0])
-  for (let i = 1; i < n - 1; i++) {
-    liquid.quadraticCurveTo(xs[i], ys[i], (xs[i] + xs[i + 1]) / 2, (ys[i] + ys[i + 1]) / 2)
-  }
-  liquid.lineTo(xs[n - 1], ys[n - 1])
+  traceSurface(liquid, 0)
   liquid.lineTo(w, h)
   liquid.lineTo(0, h)
   liquid.closePath()
 
-  const body = ctx.createLinearGradient(0, baseY - h * 0.06, 0, h)
+  const body = ctx.createLinearGradient(0, baseY - h * 0.1, 0, h)
   for (const [offset, color] of palette.stops) body.addColorStop(offset, color)
   ctx.fillStyle = body
   ctx.fill(liquid)
 
   const energy = surface.impactEnergy
   const vertexX = seam === 'right' ? w : 0
+
   ctx.save()
   ctx.clip(liquid)
   ctx.globalCompositeOperation = 'lighter'
-  const causticRadius = w * (1.05 + energy * 0.35)
-  const caustic = ctx.createRadialGradient(vertexX, h, 0, vertexX, h, causticRadius)
-  const causticAlpha = 0.26 + Math.sin(time * 1.6) * 0.04 + energy * 0.35
-  caustic.addColorStop(0, `${palette.caustic}${causticAlpha.toFixed(3)})`)
-  caustic.addColorStop(0.45, `${palette.caustic}${(causticAlpha * 0.32).toFixed(3)})`)
-  caustic.addColorStop(1, `${palette.caustic}0)`)
-  ctx.fillStyle = caustic
+
+  const fresnel = ctx.createLinearGradient(0, baseY - h * 0.08, 0, baseY + h * 0.16)
+  fresnel.addColorStop(0, 'rgba(255,255,255,0.1)')
+  fresnel.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = fresnel
   ctx.fillRect(0, 0, w, h)
+
+  const glow = ctx.createRadialGradient(vertexX, h * 0.7, 0, vertexX, h * 0.7, w * (0.9 + energy * 0.4))
+  const glowAlpha = 0.12 + Math.sin(time * 1.4) * 0.02 + energy * 0.3
+  glow.addColorStop(0, `${palette.light}${glowAlpha.toFixed(3)})`)
+  glow.addColorStop(1, `${palette.light}0)`)
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, w, h)
+
+  ctx.lineCap = 'round'
+  for (let k = 0; k < 3; k++) {
+    const y0 = baseY + h * (0.16 + k * 0.15)
+    const speed = 0.7 + k * 0.35
+    ctx.beginPath()
+    for (let x = 0; x <= w; x += 4) {
+      const y = y0 + Math.sin(x * 0.045 + time * speed + phase + k) * h * 0.022 + Math.sin(x * 0.11 - time * 1.3) * h * 0.008
+      if (x === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.lineWidth = 1.1 - k * 0.2
+    ctx.strokeStyle = `${palette.light}${(0.16 - k * 0.04).toFixed(3)})`
+    ctx.stroke()
+  }
+
+  for (let b = 0; b < BUBBLES; b++) {
+    const period = 4.5 + b * 0.85
+    const progress = ((time + b * 1.7 + phase) / period) % 1
+    const anchor = seam === 'right' ? 0.55 + ((b * 0.37) % 0.42) : 0.03 + ((b * 0.37) % 0.42)
+    const bx = anchor * w + Math.sin(time * 2.4 + b) * 1.6
+    const index = clamp(Math.round((bx / w) * (n - 1)), 0, n - 1)
+    const surfaceY = ys[index]
+    const by = h - progress * (h - surfaceY)
+    const radius = 0.55 + (b % 3) * 0.35
+    ctx.beginPath()
+    ctx.arc(bx, by, radius, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,255,255,${(0.32 * Math.sin(progress * Math.PI)).toFixed(3)})`
+    ctx.fill()
+  }
   ctx.restore()
 
   ctx.save()
   ctx.beginPath()
-  traceSurface(0)
-  ctx.lineWidth = 1.0
+  traceSurface(ctx, 0)
+  ctx.lineWidth = 0.9
   ctx.strokeStyle = palette.meniscus
   ctx.shadowColor = palette.meniscusGlow
-  ctx.shadowBlur = 8 + energy * 10
+  ctx.shadowBlur = 6 + energy * 10
   ctx.stroke()
   ctx.restore()
 
   ctx.save()
   ctx.beginPath()
-  traceSurface(2)
+  traceSurface(ctx, 2.2)
   const reflection = ctx.createLinearGradient(0, 0, w, 0)
   const near = seam === 'right' ? 1 : 0
-  reflection.addColorStop(near, 'rgba(255,255,255,0.32)')
+  reflection.addColorStop(near, 'rgba(255,255,255,0.35)')
   reflection.addColorStop(0.5, 'rgba(255,255,255,0.12)')
   reflection.addColorStop(1 - near, 'rgba(255,255,255,0)')
   ctx.lineWidth = 0.6
@@ -162,10 +263,56 @@ function drawHalf(half: HalfRuntime, dpr: number, time: number) {
   ctx.restore()
 }
 
+/** One half of the running blue frame; each half carries the light for half of the loop. */
+function FrameHalf({ points, offsetFrom }: { points: string; offsetFrom: number }) {
+  return (
+    <>
+      <polyline points={points} fill="none" stroke={FRAME_STROKE} strokeWidth={0.7} strokeLinejoin="round" />
+      <polyline
+        points={points}
+        pathLength={50}
+        fill="none"
+        stroke={FRAME_GLOW}
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray="8 92"
+        filter="url(#frame-glow)"
+      >
+        <animate
+          attributeName="stroke-dashoffset"
+          from={offsetFrom}
+          to={offsetFrom - 100}
+          dur={FRAME_DURATION}
+          repeatCount="indefinite"
+        />
+      </polyline>
+      <polyline
+        points={points}
+        pathLength={50}
+        fill="none"
+        stroke={FRAME_CORE}
+        strokeWidth={0.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray="3 97"
+      >
+        <animate
+          attributeName="stroke-dashoffset"
+          from={offsetFrom - 2.5}
+          to={offsetFrom - 102.5}
+          dur={FRAME_DURATION}
+          repeatCount="indefinite"
+        />
+      </polyline>
+    </>
+  )
+}
+
 export function SplitDiamond() {
   const stageRef = useRef<HTMLDivElement>(null)
   const seamRef = useRef<HTMLDivElement>(null)
-  const shockRef = useRef<HTMLDivElement>(null)
+  const shockRef = useRef<SVGSVGElement>(null)
   const teaCanvasRef = useRef<HTMLCanvasElement>(null)
   const coffeeCanvasRef = useRef<HTMLCanvasElement>(null)
   const teaRef = useRef<HTMLDivElement>(null)
@@ -173,10 +320,7 @@ export function SplitDiamond() {
 
   const halves = useRef<{ tea: HalfRuntime; coffee: HalfRuntime } | null>(null)
   if (halves.current === null) {
-    halves.current = {
-      tea: { canvas: null, el: null, surface: new FluidSurface(FLUID_POINTS), palette: TEA, seam: 'right', width: 0, height: 0 },
-      coffee: { canvas: null, el: null, surface: new FluidSurface(FLUID_POINTS), palette: COFFEE, seam: 'left', width: 0, height: 0 },
-    }
+    halves.current = { tea: createHalf(TEA, 'right', 0), coffee: createHalf(COFFEE, 'left', 2.1) }
   }
 
   const physics = useRef<PhysicsState>({
@@ -188,7 +332,7 @@ export function SplitDiamond() {
     armed: false,
     pointerId: null,
     dragOriginX: 0,
-    pointer: { x: 0, y: 0, vx: 0, lastX: 0, lastT: 0 },
+    pointer: { x: 0, y: 0, vx: 0, lastX: 0, lastT: 0, active: false },
     recoil: 0,
     shockAge: Number.POSITIVE_INFINITY,
     shockStrength: 0,
@@ -214,7 +358,7 @@ export function SplitDiamond() {
       for (const half of [runtime.tea, runtime.coffee]) {
         if (!half.canvas) continue
         half.width = size / 2
-        half.height = size
+        half.height = stage.clientHeight
         half.canvas.width = Math.round(half.width * dpr)
         half.canvas.height = Math.round(half.height * dpr)
       }
@@ -224,6 +368,35 @@ export function SplitDiamond() {
     const observer = new ResizeObserver(resize)
     observer.observe(stage)
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const pointer = physics.current.pointer
+    const track = (event: PointerEvent) => {
+      pointer.x = event.clientX
+      pointer.y = event.clientY
+      pointer.active = true
+    }
+    const leave = () => {
+      pointer.active = false
+    }
+    const touchEnd = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') pointer.active = false
+    }
+    window.addEventListener('pointermove', track, { passive: true })
+    window.addEventListener('pointerdown', track, { passive: true })
+    window.addEventListener('pointerup', touchEnd, { passive: true })
+    window.addEventListener('pointercancel', leave, { passive: true })
+    document.documentElement.addEventListener('pointerleave', leave)
+    window.addEventListener('blur', leave)
+    return () => {
+      window.removeEventListener('pointermove', track)
+      window.removeEventListener('pointerdown', track)
+      window.removeEventListener('pointerup', touchEnd)
+      window.removeEventListener('pointercancel', leave)
+      document.documentElement.removeEventListener('pointerleave', leave)
+      window.removeEventListener('blur', leave)
+    }
   }, [])
 
   useEffect(() => {
@@ -300,17 +473,18 @@ export function SplitDiamond() {
       }
       if (shockRef.current) {
         const eased = 1 - (1 - shockProgress) ** 3
-        shockRef.current.style.transform = `translate(-50%, -50%) scale(${(0.2 + eased * (1.4 + s.shockStrength)).toFixed(3)}) rotate(45deg)`
+        shockRef.current.style.transform = `scale(${(0.2 + eased * (1.4 + s.shockStrength)).toFixed(3)})`
         shockRef.current.style.opacity = ((1 - shockProgress) ** 2 * Math.min(s.shockStrength, 1) * 0.7).toFixed(3)
       }
 
-      const maxAmplitude = s.size * 0.22
+      const maxAmplitude = (stageRef.current?.clientHeight ?? s.size) * 0.22
       for (const [half, factor] of [
         [runtime.tea, teaFactor],
         [runtime.coffee, coffeeFactor],
       ] as const) {
         half.surface.applyTilt(clamp(acceleration * factor * 0.0042, -90, 90) * dt * 60)
         half.surface.step(dt, maxAmplitude)
+        updateMagnet(half, s.pointer, dt)
         drawHalf(half, s.dpr, s.time)
       }
 
@@ -335,7 +509,7 @@ export function SplitDiamond() {
       if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue
       const index = ((clientX - rect.left) / rect.width) * (FLUID_POINTS - 1)
       const depth = clamp((clientY - rect.top) / rect.height - SURFACE_LEVEL + 0.35, 0.2, 1)
-      const force = clamp(vx * 170 * depth, -520, 520)
+      const force = clamp(vx * 140 * depth, -420, 420)
       const direction = Math.sign(vx)
       half.surface.applyForce(index + direction * 2.5, Math.abs(force), 2.6)
       half.surface.applyForce(index - direction * 2.5, -Math.abs(force) * 0.85, 2.6)
@@ -360,8 +534,6 @@ export function SplitDiamond() {
     s.pointer.vx = s.pointer.vx * 0.6 + instantVx * 0.4
     s.pointer.lastX = event.clientX
     s.pointer.lastT = event.timeStamp
-    s.pointer.x = event.clientX
-    s.pointer.y = event.clientY
 
     if (s.dragging && event.pointerId === s.pointerId) {
       s.targetX = rubberBand(event.clientX - s.dragOriginX)
@@ -387,25 +559,43 @@ export function SplitDiamond() {
   }
 
   return (
-    <div className="relative flex items-center justify-center">
+    <div className="relative flex aspect-[1.7/1] w-[clamp(220px,60vw,260px)] items-center justify-center sm:w-[clamp(260px,32vw,400px)]">
       <div
         ref={stageRef}
         role="img"
         tabIndex={0}
-        aria-label="Split diamond: tea on the left, coffee on the right. Drag sideways or press the arrow keys to part the halves and release to make them clash."
-        className="relative aspect-square w-[clamp(160px,22vw,240px)] cursor-grab touch-none select-none outline-none will-change-transform active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:ring-offset-8 focus-visible:ring-offset-[#070708]"
+        aria-label="Split diamond: tea on the left, coffee on the right. Move the cursor near the liquid to draw it like a magnet, drag sideways or press the arrow keys to part the halves and release to make them clash."
+        className="relative aspect-[1.7/1] w-[62%] cursor-grab touch-none select-none outline-none will-change-transform active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:ring-offset-8 focus-visible:ring-offset-[#070708]"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={release}
         onPointerCancel={release}
         onKeyDown={handleKeyDown}
       >
-        <div
+        <svg aria-hidden="true" width="0" height="0" className="absolute">
+          <defs>
+            <filter id="frame-glow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="2" />
+            </filter>
+          </defs>
+        </svg>
+
+        <svg
           ref={shockRef}
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 size-[71%] border border-white/40 opacity-0"
-          style={{ transform: 'translate(-50%, -50%) scale(0.2) rotate(45deg)', filter: 'blur(0.5px)' }}
-        />
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 size-full overflow-visible opacity-0"
+          style={{ transform: 'scale(0.2)', filter: 'blur(0.5px)' }}
+        >
+          <polygon
+            points="50,0 100,50 50,100 0,50"
+            fill="none"
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
 
         <div
           ref={teaRef}
@@ -417,17 +607,11 @@ export function SplitDiamond() {
           </div>
           <svg
             className="pointer-events-none absolute inset-0 size-full overflow-visible"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
+            viewBox="0 0 85 100"
             aria-hidden="true"
           >
-            <polygon
-              points="100,0 100,100 0,50"
-              fill="none"
-              stroke="rgba(230,236,200,0.38)"
-              strokeWidth={0.5}
-              vectorEffect="non-scaling-stroke"
-            />
+            <polygon points="85,0 85,100 0,50" fill="none" stroke="rgba(230,240,200,0.32)" strokeWidth={0.6} />
+            <FrameHalf points="85,-4 -6.5,50 85,104" offsetFrom={0} />
           </svg>
         </div>
 
@@ -441,17 +625,11 @@ export function SplitDiamond() {
           </div>
           <svg
             className="pointer-events-none absolute inset-0 size-full overflow-visible"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
+            viewBox="0 0 85 100"
             aria-hidden="true"
           >
-            <polygon
-              points="0,0 100,50 0,100"
-              fill="none"
-              stroke="rgba(244,220,196,0.38)"
-              strokeWidth={0.5}
-              vectorEffect="non-scaling-stroke"
-            />
+            <polygon points="0,0 85,50 0,100" fill="none" stroke="rgba(250,224,200,0.32)" strokeWidth={0.6} />
+            <FrameHalf points="0,104 91.5,50 0,-4" offsetFrom={50} />
           </svg>
         </div>
 
@@ -460,8 +638,7 @@ export function SplitDiamond() {
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2"
           style={{
-            background:
-              'linear-gradient(to bottom, transparent, rgba(255,246,224,0.75) 50%, transparent)',
+            background: 'linear-gradient(to bottom, transparent, rgba(255,246,224,0.75) 50%, transparent)',
             boxShadow: '0 0 10px rgba(255,236,200,0.45)',
           }}
         />
