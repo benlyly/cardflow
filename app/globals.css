@@ -161,3 +161,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes mc-breathe {
+  0%,
+  100% {
+    opacity: 0.75;
+    scale: 1;
+  }
+  50% {
+    opacity: 1;
+    scale: 1.08;
+  }
+}
+
+.mc-breathe {
+  animation: mc-breathe 9s ease-in-out infinite;
+}
+
+.mc-breathe-delayed {
+  animation-delay: -4.5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-breathe {
+    animation: none;
+  }
+}
