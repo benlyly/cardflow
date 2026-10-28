@@ -21,7 +21,7 @@ export function MasterTitle() {
       <div className="flex items-center gap-4 md:gap-7">
         <Ornament />
         <h1
-          className="bg-clip-text pl-[0.32em] font-[family-name:var(--font-display)] text-5xl font-light uppercase leading-none tracking-[0.32em] text-transparent md:text-7xl"
+          className="bg-clip-text pl-[0.32em] font-[family-name:var(--font-display)] text-[2.75rem] font-light uppercase leading-none tracking-[0.32em] text-transparent md:text-[4rem]"
           style={{
             backgroundImage: GOLD_GRADIENT,
             WebkitTextStroke: '0.6px rgba(247,231,180,0.35)',

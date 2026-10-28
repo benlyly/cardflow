@@ -10,7 +10,7 @@ export default function Page() {
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-12 px-6 py-10">
         <MasterTitle />
 
-        <div className="flex items-center gap-6 md:gap-14">
+        <div className="flex items-center gap-10 md:gap-24">
           <div className="hidden flex-col items-end gap-1.5 text-right sm:flex">
             <span className="text-[10px] font-light uppercase tracking-[0.4em] text-[rgba(190,210,140,0.55)]">Tea</span>
             <span className="text-[11px] font-light tracking-wide text-white/25">Leaf, patience, light</span>
@@ -30,7 +30,7 @@ export default function Page() {
           <span className="text-[10px] font-light uppercase tracking-[0.4em] text-[rgba(226,170,120,0.55)]">Coffee</span>
         </div>
 
-        <p className="font-[family-name:var(--font-display)] text-lg font-light italic tracking-[0.08em] text-[rgba(232,207,143,0.6)] text-balance">
+        <p className="font-[family-name:var(--font-display)] text-lg font-light tracking-[0.08em] text-[rgba(232,207,143,0.6)] text-balance">
           {'...find the one whose love you drink...'}
         </p>
       </main>

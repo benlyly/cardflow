@@ -387,13 +387,13 @@ export function SplitDiamond() {
   }
 
   return (
-    <div className="relative flex items-center justify-center">
+    <div className="relative flex aspect-[1.7/1] w-[clamp(240px,34vw,400px)] items-center justify-center">
       <div
         ref={stageRef}
         role="img"
         tabIndex={0}
         aria-label="Split diamond: tea on the left, coffee on the right. Drag sideways or press the arrow keys to part the halves and release to make them clash."
-        className="relative aspect-[1.7/1] w-[clamp(240px,34vw,400px)] cursor-grab touch-none select-none outline-none will-change-transform active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:ring-offset-8 focus-visible:ring-offset-[#070708]"
+        className="relative aspect-[1.7/1] w-1/2 cursor-grab touch-none select-none outline-none will-change-transform active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:ring-offset-8 focus-visible:ring-offset-[#070708]"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={release}
@@ -464,6 +464,47 @@ export function SplitDiamond() {
             />
           </svg>
         </div>
+
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 170 100"
+          className="pointer-events-none absolute inset-0 size-full overflow-visible"
+        >
+          <defs>
+            <filter id="frame-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="2.2" />
+            </filter>
+          </defs>
+          <polygon
+            points="85,-7 182,50 85,107 -12,50"
+            fill="none"
+            stroke="rgba(86,132,230,0.55)"
+            strokeWidth={0.7}
+          />
+          <polygon
+            points="85,-7 182,50 85,107 -12,50"
+            pathLength={100}
+            fill="none"
+            stroke="rgba(120,170,255,0.9)"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeDasharray="10 90"
+            filter="url(#frame-glow)"
+          >
+            <animate attributeName="stroke-dashoffset" from="0" to="-100" dur="7s" repeatCount="indefinite" />
+          </polygon>
+          <polygon
+            points="85,-7 182,50 85,107 -12,50"
+            pathLength={100}
+            fill="none"
+            stroke="rgba(206,224,255,0.95)"
+            strokeWidth={0.9}
+            strokeLinecap="round"
+            strokeDasharray="4 96"
+          >
+            <animate attributeName="stroke-dashoffset" from="-3" to="-103" dur="7s" repeatCount="indefinite" />
+          </polygon>
+        </svg>
 
         <div
           ref={seamRef}
